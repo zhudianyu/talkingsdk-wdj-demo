@@ -1,0 +1,4 @@
+[submodule "jni/SdkBase_release"]
+	path = jni/SdkBase_release
+	url = git@repos.code4.in:cooperators/sdkbase-release.git
+	branch = master

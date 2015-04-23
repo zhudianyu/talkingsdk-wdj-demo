@@ -1,0 +1,160 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:0.10.2'
+    }
+}
+
+apply plugin: 'android'
+
+android {
+    compileSdkVersion 16
+    compileSdkVersion 19
+    buildToolsVersion "19.0.3"
+
+    defaultConfig {
+        minSdkVersion 8
+        targetSdkVersion 19
+        versionCode 1
+        versionName "1.0"
+    }
+    Properties signingProperties = new Properties()
+
+    if (file("signing.properties").exists()) {
+      signingProperties.load(new FileInputStream(file("signing.properties")))
+      signingConfigs {
+          release {
+              storeFile file(signingProperties['signing.release.storeFile'])
+              storePassword signingProperties['signing.release.storePassword']
+              keyAlias signingProperties['signing.release.keyAlias']
+              keyPassword signingProperties['signing.release.keyPassword']
+          }
+       }
+
+       buildTypes {
+        release {
+          signingConfig signingConfigs.release
+        }
+
+        beta {
+          signingConfig signingConfigs.release
+        }
+       }
+    }
+
+    buildTypes {
+        release {
+            buildConfigField "boolean", "USE_BUGSENSE", "true"
+        }
+
+        beta {
+            buildConfigField "boolean", "USE_BUGSENSE", "true"
+        }
+
+        debug {
+            buildConfigField "boolean", "USE_BUGSENSE", "false"
+        }
+
+
+        jnidebug.initWith(buildTypes.debug)
+        jnidebug {
+            jniDebugBuild true
+        }
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDir 'src'
+            res.srcDir 'res'
+            assets.srcDir 'assets'
+            resources.srcDir 'src'
+            jniLibs.srcDirs 'libs'
+            jni.srcDirs = []
+        }
+        test {
+            java.srcDir 'tests/src'
+        }
+    }
+    lintOptions {
+        abortOnError false
+    }
+    tasks.withType(JavaCompile) {
+        compileTask -> compileTask.dependsOn ndkBuild
+    }
+}
+import org.apache.tools.ant.taskdefs.condition.Os
+
+def readEnv(){
+    def env = [parallel : 10 , sdk : "/my/sdk/path", ndk : "/my/ndk/path"]
+    def filename = "local.properties"
+    Properties envProperties = new Properties()
+
+    if (file(filename).exists()) {
+        envProperties.load(new FileInputStream(file(filename)))
+        env['parallel'] =  envProperties['parallel']
+        env['sdk'] =  envProperties['sdk.dir']
+        env['ndk'] =  envProperties['ndk.dir']
+    } else {
+    }
+    return env
+}
+
+
+task ndkBuild(dependsOn: init, type: Exec) {
+    def ndkModulePath = getEnvironment()["NDK_MODULE_PATH"]
+    def path = getEnvironment()["PATH"]
+    def sep = null
+    def ndkBuildCmd = null
+    def parallel = null
+    def hasNdkDir
+    def env= readEnv()
+    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+        sep = ';'
+        ndkBuildCmd = 'ndk-build.cmd'
+    } else {
+        sep = ':'
+        ndkBuildCmd = 'ndk-build'
+    }
+    environment("NDK_MODULE_PATH",ndkModulePath + sep + getWorkingDir() + "/jni")
+    environment("PATH",env["ndk"] + sep + path )
+    commandLine ndkBuildCmd, '-j' + env['parallel']
+    def tmp = new File(env["ndk"], ndkBuildCmd)
+    if ( tmp.exists() ){
+        hasNdkDir = true
+    }
+
+    doFirst {
+      if (!hasNdkDir) {
+        logger.error("********NDK varliable not set********")
+      }
+      assert hasNdkDir : "NDK command failed"
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url "http://repos.code4.in/release/talkingsdk-maven/raw/master/"
+    }
+}
+
+dependencies {
+    if ( System.getenv()["TSENV"] != "production" ) {
+        println(" in development" )
+        compile project (":projects:talkingsdk-wdj")
+    } else {
+        println(" in production" )
+        compile("com.talkingsdk:talkingsdk-wdj:0.6")
+        compile("com.talkingsdk:talkingsdk:0.6")
+        compile("org.cocos2d-x:cocos2dx:2.1.5")
+    }
+    compile fileTree(dir: 'libs', include: '*.jar')
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '1.12'
+}
